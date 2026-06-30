@@ -51,8 +51,10 @@ function processApolloSheet() {
     ui.alert(
       '✅ Step 1.2 Complete!\n\n' +
       'Domain column updated in "Apollo Leads" tab.\n' +
-      '(No raw source tabs found to split.)'
+      '(No raw source tabs found to split.)\n\n' +
+      '➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…'
     );
+    _scheduleTrigger('autoStep2Start'); // continue the auto-chain
     return;
   }
 
@@ -81,8 +83,10 @@ function processApolloSheet() {
     '✅ Step 1.2 Complete!\n\n' +
     '✔ Added to "Apollo Leads":  ' + result.valid     + ' rows\n' +
     '✔ Moved to "Remaining":     ' + result.remaining + ' rows\n\n' +
-    'Domain column updated in "Apollo Leads" tab.'
+    'Domain column updated in "Apollo Leads" tab.\n\n' +
+    '➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…'
   );
+  _scheduleTrigger('autoStep2Start'); // continue the auto-chain
 }
 
 // ── Core: split source tab → Apollo Leads + Remaining ────────────

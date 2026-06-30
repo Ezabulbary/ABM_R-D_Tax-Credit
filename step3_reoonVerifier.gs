@@ -38,21 +38,54 @@ var PCOL = {
 //  PUBLIC — Menu actions
 // ════════════════════════════════════════════════════════════
 
+// Menu entry — shows alerts, then starts the first batch.
 function startVerification() {
+  var ui     = SpreadsheetApp.getUi();
+  var reason = _prepareVerification();
+  if (reason === 'no_perm') { ui.alert('❌ "Email Permutator" not found. Run Step 2 first.'); return; }
+  if (reason === 'no_keys') { ui.alert('❌ No Reoon API keys found!\nUse "⚙️ Manage Reoon API Keys".'); return; }
+  if (reason === 'all_done'){ ui.alert('🎉 All rows already verified!'); return; }
+
+  ui.alert(
+    '▶️ Step 3 Starting!\n\n' +
+    'Verification runs in background, auto-resumes every 30 sec.\n' +
+    'When done, Step 4 (Final Format) starts automatically.\n\n' +
+    'To check progress: "📊 Check Progress"\n' +
+    'To stop: "⛔ Stop Verification"'
+  );
+  _runVerifyBatch();
+}
+
+// Auto-chain entry point (runs from a background time trigger).
+// Scheduled by Step 2. No UI is available here, so it just prepares
+// progress and runs the first batch; errors are logged only.
+function autoStep3Start() {
+  _deleteTriggersForFunction('autoStep3Start');
+  var reason = _prepareVerification();
+  if (reason === 'all_done') {
+    // Nothing new to verify — skip straight to Step 4 so the chain
+    // still produces the Final Format output.
+    Logger.log('[autoStep3Start] all rows already verified, jumping to Step 4.');
+    _scheduleTrigger('autoFinalFormatStart');
+    return;
+  }
+  if (reason !== 'ok') {
+    Logger.log('[autoStep3Start] cannot start, reason=' + reason);
+    return;
+  }
+  _runVerifyBatch();
+}
+
+// Shared setup used by both the menu and the auto-chain.
+// Resets progress to the first unverified row. Returns a status string:
+// 'no_perm' | 'no_keys' | 'all_done' | 'ok'.
+function _prepareVerification() {
   var ss        = SpreadsheetApp.getActiveSpreadsheet();
   var permSheet = ss.getSheetByName(CONFIG.PERMUTATOR_SHEET_NAME);
-  if (!permSheet) {
-    SpreadsheetApp.getUi().alert('❌ "Email Permutator" not found. Run Step 2 first.');
-    return;
-  }
+  if (!permSheet) return 'no_perm';
+  if (getApiKeys().length === 0) return 'no_keys';
 
-  var apiKeys = getApiKeys();
-  if (apiKeys.length === 0) {
-    SpreadsheetApp.getUi().alert('❌ No Reoon API keys found!\nUse "⚙️ Manage Reoon API Keys".');
-    return;
-  }
-
-  // Find first unverified row
+  // Find first unverified row (email or final status still empty).
   var data      = permSheet.getDataRange().getValues();
   var startFrom = 1;
   for (var r = 1; r < data.length; r++) {
@@ -61,11 +94,7 @@ function startVerification() {
     if (!email || !status) { startFrom = r; break; }
     startFrom = data.length; // all done
   }
-
-  if (startFrom >= data.length) {
-    SpreadsheetApp.getUi().alert('🎉 All rows already verified!');
-    return;
-  }
+  if (startFrom >= data.length) return 'all_done';
 
   var props = PropertiesService.getScriptProperties();
   props.setProperty(PROP_ROW,     String(startFrom));
@@ -75,16 +104,7 @@ function startVerification() {
   props.setProperty(PROP_SSKIP,   '0');
 
   _deleteTriggersForFunction(TRIGGER_FN_VERIFY);
-
-  SpreadsheetApp.getUi().alert(
-    '▶️ Step 3 Starting!\n\n' +
-    'Verification runs in background, auto-resumes every 30 sec.\n' +
-    'When done, Step 4 (Final Format) starts automatically.\n\n' +
-    'To check progress: "📊 Check Progress"\n' +
-    'To stop: "⛔ Stop Verification"'
-  );
-
-  _runVerifyBatch();
+  return 'ok';
 }
 
 function autoVerifyContinue() {
@@ -297,14 +317,8 @@ function _runVerifyBatch() {
     20
   );
 
-  // Auto-chain to Step 4
+  // Auto-chain to Step 4 (autoFinalFormatStart is defined in step4).
   _scheduleTrigger('autoFinalFormatStart');
-}
-
-// Auto-trigger entry point that starts Step 4 after Step 3 completes
-function autoFinalFormatStart() {
-  _deleteTriggersForFunction('autoFinalFormatStart');
-  startFinalFormat();
 }
 
 // ════════════════════════════════════════════════════════════

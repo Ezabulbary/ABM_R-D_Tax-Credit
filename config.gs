@@ -23,6 +23,16 @@ var CONFIG = {
 
   // ── Verification ─────────────────────────────────────────
   VALID_STATUSES          : ['safe', 'catch_all'],
+
+  // ── BigQuery (Step 4 also pushes leads here) ──────────────
+  // Fill these in AFTER following BigQuery_Setup_Guide.txt, then
+  // set BQ_ENABLED to true. While BQ_ENABLED is false the whole
+  // BigQuery part is skipped silently — the rest of the workflow
+  // still runs and writes the "Final Format" tab as usual.
+  BQ_ENABLED              : false,   // turn true once setup is done
+  BQ_PROJECT_ID           : '',      // e.g. 'abm-lead-gen-471203'
+  BQ_DATASET_ID           : 'abm_leads',     // BigQuery dataset name
+  BQ_TABLE_ID             : 'final_format',  // BigQuery table name
 };
 
 // ── API Key Helpers ───────────────────────────────────────────

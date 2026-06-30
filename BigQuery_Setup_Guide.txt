@@ -1,0 +1,239 @@
+==================================================================
+ BIGQUERY SETUP GUIDE  —  ABM R&D Tax Credit Lead Gen
+ (Written for someone who has NEVER used BigQuery before.)
+==================================================================
+
+WHY ARE WE DOING THIS?
+----------------------
+Google Sheets can only hold about 10 million cells. As you add leads
+every day, the sheet fills up and slows down. BigQuery is Google's
+data warehouse — it can hold BILLIONS of rows and never gets slow.
+
+Step 4 of the workflow will copy every new lead into a BigQuery table
+automatically. Your Google Sheet stays light; your real database of
+leads lives safely in BigQuery.
+
+This is a ONE-TIME setup. After this, everything is automatic.
+
+IMPORTANT: Until you finish this guide, BigQuery is turned OFF
+(BQ_ENABLED is false in config.gs). The rest of the workflow still
+works perfectly without it. So there is no rush — do this when ready.
+
+
+==================================================================
+ PART A — CREATE A GOOGLE CLOUD PROJECT
+==================================================================
+
+A1. Open this link in your browser (log in with the SAME Google
+    account that owns your spreadsheets):
+        https://console.cloud.google.com/
+
+A2. At the very top of the page there is a project dropdown
+    (it may say "Select a project"). Click it.
+
+A3. Click "NEW PROJECT" (top-right of the popup).
+
+A4. Project name: type something simple, e.g.
+        ABM Lead Gen
+    Then click "CREATE". Wait ~10 seconds.
+
+A5. Click the project dropdown again and SELECT the project you
+    just made, so it becomes the active project.
+
+A6. WRITE DOWN TWO THINGS (you will need them later):
+    - PROJECT ID     (looks like:  abm-lead-gen-471203)
+    - PROJECT NUMBER (looks like:  123456789012)
+
+    Where to find them:
+      Go to:  Console -> "IAM & Admin" -> "Settings"
+      (or just look on the Dashboard home page).
+    The PROJECT ID is the one with letters and dashes.
+    The PROJECT NUMBER is all digits.
+
+    NOTE: BigQuery may ask you to enable billing. The free tier is
+    very generous (10 GB storage + 1 TB queries per month free).
+    For this lead data you will almost certainly stay free, but
+    Google still requires a billing account to be linked. Follow
+    the on-screen prompt to add one if asked.
+
+
+==================================================================
+ PART B — ENABLE THE BIGQUERY API
+==================================================================
+
+B1. Make sure your new project is still selected (top dropdown).
+
+B2. Open this link:
+        https://console.cloud.google.com/apis/library/bigquery.googleapis.com
+
+B3. Click the blue "ENABLE" button. Wait a few seconds.
+    (If it already says "MANAGE", it is already enabled — good.)
+
+
+==================================================================
+ PART C — CREATE THE DATASET AND TABLE
+==================================================================
+
+A "dataset" is like a folder. A "table" is like one sheet/tab
+inside it. We will create one dataset and one table.
+
+C1. Open BigQuery Studio:
+        https://console.cloud.google.com/bigquery
+
+C2. On the left "Explorer" panel, find your PROJECT name.
+    Click the three dots (⋮) next to it -> "Create dataset".
+
+C3. Fill in:
+        Dataset ID:   abm_leads
+        Location:     (leave default, e.g. "US")
+    Click "CREATE DATASET".
+
+C4. Now expand your project on the left, you will see "abm_leads".
+    Click the three dots (⋮) next to "abm_leads" -> "Create table".
+
+C5. In the "Create table" form:
+      - Source:        leave as "Empty table"
+      - Table name:    final_format
+      - Schema:        click "Edit as text" (a toggle/link), then
+                       PASTE the whole block below into the box:
+
+----------- COPY EVERYTHING BETWEEN THE LINES -----------
+organization_name:STRING,
+domain:STRING,
+first_name:STRING,
+last_name:STRING,
+email:STRING,
+verification_status:STRING,
+title:STRING,
+seniority:STRING,
+departments:STRING,
+person_linkedin_url:STRING,
+city:STRING,
+state:STRING,
+country:STRING,
+headline:STRING,
+founded_date:STRING,
+number_of_employees:STRING,
+full_description:STRING,
+industry:STRING,
+patents_granted:STRING,
+total_funding_amount:STRING,
+it_spend_aberdeen:STRING,
+most_recent_valuation_range:STRING,
+estimated_revenue_range:STRING
+---------------------------------------------------------
+
+C6. Click "CREATE TABLE".
+
+    You now have:  PROJECT -> abm_leads -> final_format
+    Every column is type STRING (plain text) on purpose, so no
+    value ever gets rejected for being the "wrong type".
+
+
+==================================================================
+ PART D — CONNECT BIGQUERY TO YOUR APPS SCRIPT
+==================================================================
+
+This has TWO small parts: (D-1) link your Cloud project to the
+script, and (D-2) turn on the BigQuery service inside the editor.
+
+D-1. LINK THE CLOUD PROJECT
+    1. Open your spreadsheet "ABM R&D Tax Credit - Automation".
+    2. Menu:  Extensions -> Apps Script  (the code editor opens).
+    3. On the LEFT, click the gear icon "Project Settings".
+    4. Scroll down to "Google Cloud Platform (GCP) Project".
+    5. Click "Change project".
+    6. Paste your PROJECT NUMBER (the all-digits one from step A6).
+    7. Click "Set project". Confirm if asked.
+
+D-2. TURN ON THE BIGQUERY SERVICE
+    1. Still in the Apps Script editor, look at the LEFT sidebar.
+    2. Next to "Services" click the "+" (plus) button.
+    3. In the list, find "BigQuery API".
+    4. Make sure the identifier shown is exactly:  BigQuery
+    5. Click "Add".
+
+    (This is what makes the word "BigQuery" work inside the code.)
+
+
+==================================================================
+ PART E — TURN IT ON IN config.gs
+==================================================================
+
+E1. In the Apps Script editor, open the file "config.gs".
+
+E2. Find the BigQuery block and edit it to look like this
+    (replace the project id with YOUR real Project ID from A6):
+
+        BQ_ENABLED    : true,
+        BQ_PROJECT_ID : 'abm-lead-gen-471203',   // <- YOUR Project ID
+        BQ_DATASET_ID : 'abm_leads',
+        BQ_TABLE_ID   : 'final_format',
+
+E3. Press Ctrl+S (or Cmd+S) to save.
+
+
+==================================================================
+ PART F — TEST IT
+==================================================================
+
+F1. Reload your spreadsheet tab in the browser.
+
+F2. Run the workflow:  Menu "🚀 Lead Gen Tools"
+        -> "▶️ RUN FULL WORKFLOW (Step 1 -> 4 -> BigQuery)"
+    (or just run Step 4 if Steps 1-3 are already done).
+
+F3. When Step 4 finishes you will see a message that includes:
+        "Also pushed to BigQuery: abm_leads.final_format"
+
+F4. Check the data in BigQuery:
+    - Go to:  https://console.cloud.google.com/bigquery
+    - Click your table "final_format" -> "PREVIEW" tab.
+    - You should see your leads. 🎉
+
+    Or run a query (click "Query" / "Compose new query") and paste:
+
+        SELECT COUNT(*) AS total_leads
+        FROM `abm_leads.final_format`;
+
+    (If it complains, use the full name with your project id:
+        FROM `abm-lead-gen-471203.abm_leads.final_format` )
+
+
+==================================================================
+ TROUBLESHOOTING
+==================================================================
+
+"BigQuery is not defined" (in the script logs)
+    -> You skipped Part D-2. Add the "BigQuery API" service.
+
+"insert failed" toast appears, sheet still updates
+    -> Most often the table name / dataset name / project id in
+       config.gs does not exactly match what you created.
+       Check spelling: abm_leads  and  final_format.
+
+"Access Denied" or "permission" error
+    -> You skipped Part D-1 (linking the project number), or the
+       BigQuery API (Part B) is not enabled.
+
+Rows go to BigQuery but some columns are empty
+    -> That is normal. A lead may simply not have that field.
+
+Nothing goes to BigQuery and no error
+    -> BQ_ENABLED is still false, or BQ_PROJECT_ID is empty in
+       config.gs. Re-check Part E.
+
+I do not want BigQuery anymore
+    -> Just set BQ_ENABLED : false in config.gs. The workflow
+       keeps running and only writes to the Sheet.
+
+
+==================================================================
+ NOTES
+==================================================================
+- The same de-duplication used for the Final Format tab is used for
+  BigQuery, so you will NOT get duplicate rows in BigQuery.
+- Data is sent in batches of up to 500 rows (same as the sheet),
+  so very large runs are handled safely and automatically.
+- All 23 columns match the "Final Format" tab, in the same order.
+==================================================================

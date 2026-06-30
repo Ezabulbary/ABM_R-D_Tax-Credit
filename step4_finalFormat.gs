@@ -67,20 +67,54 @@ var TRIGGER_FN_FINAL   = 'autoFinalFormatContinue';
 //  PUBLIC — Menu actions
 // ════════════════════════════════════════════════════════════
 
+// Menu entry — shows alerts, then starts the first batch.
 function startFinalFormat() {
+  var ui     = SpreadsheetApp.getUi();
+  var reason = _prepareFinalFormat();
+  if (reason === 'no_main') {
+    ui.alert('❌ "' + CONFIG.MAIN_SHEET_NAME + '" not found in ABM_R&D_Tax Credit.');
+    return;
+  }
+  if (reason === 'no_perm') {
+    ui.alert('❌ "Email Permutator" not found. Run Steps 2 & 3 first.');
+    return;
+  }
+
+  ui.alert(
+    '▶️ Step 4 Starting!\n\n' +
+    'Final Format sheet is being built in the background.\n' +
+    'Auto-resumes every 30 sec until complete.\n\n' +
+    (CONFIG.BQ_ENABLED
+      ? 'Each batch is also pushed to BigQuery.\n\n'
+      : 'BigQuery push is OFF (set BQ_ENABLED=true in config.gs to enable).\n\n') +
+    'Output: "Final Format" tab in ABM_R&D_Tax Credit spreadsheet.'
+  );
+
+  _runFinalFormatBatch();
+}
+
+// Auto-chain entry point (runs from a background time trigger).
+// Scheduled by Step 3 when verification finishes. No UI here.
+function autoFinalFormatStart() {
+  _deleteTriggersForFunction('autoFinalFormatStart');
+  var reason = _prepareFinalFormat();
+  if (reason !== 'ok') {
+    Logger.log('[autoFinalFormatStart] cannot start, reason=' + reason);
+    return;
+  }
+  _runFinalFormatBatch();
+}
+
+// Shared setup used by both the menu and the auto-chain.
+// Resets batch progress. Returns 'no_main' | 'no_perm' | 'ok'.
+function _prepareFinalFormat() {
   var automationSS = SpreadsheetApp.getActiveSpreadsheet();
   var permSheet    = automationSS.getSheetByName(CONFIG.PERMUTATOR_SHEET_NAME);
   var crunchbaseSS = SpreadsheetApp.openById(CONFIG.CRUNCHBASE_SS_ID);
   var mainSheet    = crunchbaseSS.getSheetByName(CONFIG.MAIN_SHEET_NAME);
 
-  if (!mainSheet) {
-    SpreadsheetApp.getUi().alert('❌ "' + CONFIG.MAIN_SHEET_NAME + '" not found in ABM_R&D_Tax Credit.');
-    return;
-  }
-  if (!permSheet) {
-    SpreadsheetApp.getUi().alert('❌ "Email Permutator" not found. Run Steps 2 & 3 first.');
-    return;
-  }
+  if (!mainSheet) return 'no_main';
+  if (!permSheet) return 'no_perm';
 
   var props = PropertiesService.getScriptProperties();
   props.setProperty(PROP_F_PERM_IDX,    '1');
@@ -89,15 +123,7 @@ function startFinalFormat() {
   props.setProperty(PROP_F_ADDED_COUNT, '0');
 
   _deleteTriggersForFunction(TRIGGER_FN_FINAL);
-
-  SpreadsheetApp.getUi().alert(
-    '▶️ Step 4 Starting!\n\n' +
-    'Final Format sheet is being built in the background.\n' +
-    'Auto-resumes every 30 sec until complete.\n\n' +
-    'Output: "Final Format" tab in ABM_R&D_Tax Credit spreadsheet.'
-  );
-
-  _runFinalFormatBatch();
+  return 'ok';
 }
 
 function autoFinalFormatContinue() {
@@ -287,7 +313,12 @@ function _runFinalFormatBatch() {
   var sesAdded     = parseInt(props.getProperty(PROP_F_ADDED_COUNT) || '0');
 
   var startTime  = Date.now();
-  var MAX_ROWS   = 500;
+  // Process as many rows as fit in MAX_RUN_MS (4.5 min). The big cap
+  // here is only a memory guard — the real limiter is time. A large
+  // value means far fewer batches, so the expensive source-read +
+  // lookup rebuild above happens only a handful of times instead of
+  // once per 500 rows. This is the main speed-up.
+  var MAX_ROWS   = 50000;
   var finalRows  = [];
   var hitTimeout = false;
 
@@ -394,6 +425,8 @@ function _runFinalFormatBatch() {
   if (finalRows.length > 0) {
     finalSheet.getRange(lastRow + 1, 1, finalRows.length, numCols).setValues(finalRows);
     sesAdded += finalRows.length;
+    // Push the exact same new rows to BigQuery (skipped if BQ disabled).
+    _insertRowsToBigQuery(finalRows, FINAL_COLUMNS);
   }
 
   finalSheet.setColumnWidths(1, numCols, 160);
@@ -465,24 +498,126 @@ function _runFinalFormatBatch() {
 
   SpreadsheetApp.flush();
 
+  var bqNote = CONFIG.BQ_ENABLED
+    ? 'Also pushed to BigQuery: ' + CONFIG.BQ_DATASET_ID + '.' + CONFIG.BQ_TABLE_ID
+    : 'BigQuery push is OFF';
+
   SpreadsheetApp.getActiveSpreadsheet().toast(
-    'Total leads added: ' + sesAdded,
+    'Total leads added: ' + sesAdded + '  |  ' + bqNote,
     '🎉 Step 4 Complete! Final Format is ready.',
     20
   );
 
-  SpreadsheetApp.getUi().showModelessDialog(
-    HtmlService.createHtmlOutput(
-      '<div style="font-family:sans-serif;color:#e2e8f0;background:#0f172a;' +
-      'padding:15px;border-radius:8px;font-size:13px;">' +
-      '<h3 style="color:#22c55e;margin-top:0;">✅ Step 4 Complete!</h3>' +
-      '<p>1. "Final Format" tab updated in <b>ABM_R&D_Tax Credit</b> spreadsheet.</p>' +
-      '<p>2. "Main_Crunchbase" summary columns updated (How Many Leads, Verification Status).</p>' +
-      '<p style="font-weight:bold;margin-top:15px;">Total new unique leads added: ' + sesAdded + '</p>' +
-      '<button onclick="google.script.host.close()" style="background:#2563eb;color:#fff;' +
-      'border:none;padding:6px 16px;border-radius:4px;cursor:pointer;margin-top:10px;">OK</button>' +
-      '</div>'
-    ).setWidth(420).setHeight(220),
-    '✅ Step 4 Complete'
-  );
+  // The completion dialog only works when a user is looking at the sheet
+  // (foreground run). In the background auto-chain getUi() throws, so the
+  // dialog is wrapped in try/catch — the toast above is always shown.
+  try {
+    SpreadsheetApp.getUi().showModelessDialog(
+      HtmlService.createHtmlOutput(
+        '<div style="font-family:sans-serif;color:#e2e8f0;background:#0f172a;' +
+        'padding:15px;border-radius:8px;font-size:13px;">' +
+        '<h3 style="color:#22c55e;margin-top:0;">✅ Step 4 Complete!</h3>' +
+        '<p>1. "Final Format" tab updated in <b>ABM_R&D_Tax Credit</b> spreadsheet.</p>' +
+        '<p>2. "Main_Crunchbase" summary columns updated (How Many Leads, Verification Status).</p>' +
+        '<p>3. ' + bqNote + '</p>' +
+        '<p style="font-weight:bold;margin-top:15px;">Total new unique leads added: ' + sesAdded + '</p>' +
+        '<button onclick="google.script.host.close()" style="background:#2563eb;color:#fff;' +
+        'border:none;padding:6px 16px;border-radius:4px;cursor:pointer;margin-top:10px;">OK</button>' +
+        '</div>'
+      ).setWidth(420).setHeight(220),
+      '✅ Step 4 Complete'
+    );
+  } catch (uiErr) {
+    Logger.log('[Step4] Completion dialog skipped (background run): ' + uiErr.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  BigQuery — stream new Final Format rows into a BigQuery table
+//
+//  Requires (one-time, see BigQuery_Setup_Guide.txt):
+//    1. A Google Cloud project with the BigQuery API enabled.
+//    2. A dataset + table whose columns match _bqFieldName() output
+//       (all columns are STRING). See the guide for the exact schema.
+//    3. The "BigQuery API" Advanced Service enabled in Apps Script
+//       (Editor -> Services -> add "BigQuery API").
+//    4. config.gs: BQ_PROJECT_ID / BQ_DATASET_ID / BQ_TABLE_ID filled
+//       in and BQ_ENABLED set to true.
+//
+//  If anything is missing, the insert is skipped (or logged) and the
+//  rest of the workflow keeps working normally.
+// ════════════════════════════════════════════════════════════
+
+function _insertRowsToBigQuery(rows, columns) {
+  // Disabled until the user finishes BigQuery setup.
+  if (!CONFIG.BQ_ENABLED) return;
+  if (!CONFIG.BQ_PROJECT_ID) {
+    Logger.log('[BigQuery] BQ_ENABLED is true but BQ_PROJECT_ID is empty — skipped.');
+    return;
+  }
+  if (!rows || rows.length === 0) return;
+
+  // Pre-compute the BigQuery column name for each sheet column once.
+  var fieldNames = columns.map(_bqFieldName);
+
+  // Convert each sheet row into a BigQuery streaming-insert row.
+  var insertRows = rows.map(function(row) {
+    var obj = Object.create(null);
+    for (var c = 0; c < fieldNames.length; c++) {
+      var v = row[c];
+      obj[fieldNames[c]] = (v === '' || v === null || v === undefined) ? null : String(v);
+    }
+    return { json: obj };
+  });
+
+  // BigQuery streaming has per-request limits (size/row count), so send
+  // in chunks. The batch above can be tens of thousands of rows.
+  var BQ_CHUNK = 2000;
+  var inserted = 0;
+
+  for (var start = 0; start < insertRows.length; start += BQ_CHUNK) {
+    var chunk   = insertRows.slice(start, start + BQ_CHUNK);
+    var request = {
+      rows: chunk,
+      skipInvalidRows: true,    // keep good rows even if one is malformed
+      ignoreUnknownValues: true // tolerate extra/renamed columns
+    };
+    try {
+      var resp = BigQuery.Tabledata.insertAll(
+        request,
+        CONFIG.BQ_PROJECT_ID,
+        CONFIG.BQ_DATASET_ID,
+        CONFIG.BQ_TABLE_ID
+      );
+      if (resp && resp.insertErrors && resp.insertErrors.length > 0) {
+        Logger.log('[BigQuery] insertErrors: ' + JSON.stringify(resp.insertErrors));
+      } else {
+        inserted += chunk.length;
+      }
+    } catch (e) {
+      // Never let a BigQuery failure break the sheet workflow.
+      Logger.log('[BigQuery] Chunk insert failed: ' + e.message);
+      try {
+        SpreadsheetApp.getActiveSpreadsheet().toast(
+          'BigQuery insert failed (sheet still updated). Check setup. ' + e.message,
+          '⚠️ BigQuery', 10
+        );
+      } catch (ignore) {}
+      return; // stop trying further chunks this batch
+    }
+  }
+
+  Logger.log('[BigQuery] Inserted ' + inserted + ' row(s) into ' +
+             CONFIG.BQ_DATASET_ID + '.' + CONFIG.BQ_TABLE_ID);
+}
+
+// Converts a sheet header into a safe BigQuery column name.
+//   "Organization Name"   -> "organization_name"
+//   "IT Spend (Aberdeen)"  -> "it_spend_aberdeen"
+//   "Person Linkedin Url"  -> "person_linkedin_url"
+function _bqFieldName(header) {
+  return String(header)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_') // any run of non-alphanumerics -> one _
+    .replace(/^_+|_+$/g, '');     // trim leading/trailing underscores
 }

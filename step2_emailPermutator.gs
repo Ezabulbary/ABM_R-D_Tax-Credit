@@ -6,7 +6,11 @@
 //              → Email Permutator tab
 // ============================================================
 
-function buildEmailPermutatorSheet() {
+// autoMode = true  -> called from the background auto-chain. No UI is
+//                     available, so the append prompt is skipped and we
+//                     always append new unique founder rows.
+// autoMode = false -> called from the menu. Shows the append prompt.
+function buildEmailPermutatorSheet(autoMode) {
   var automationSS = SpreadsheetApp.getActiveSpreadsheet(); // this spreadsheet
   var crunchbaseSS = SpreadsheetApp.openById(CONFIG.CRUNCHBASE_SS_ID);
   var mainSheet    = crunchbaseSS.getSheetByName(CONFIG.MAIN_SHEET_NAME);
@@ -39,12 +43,15 @@ function buildEmailPermutatorSheet() {
   var existingKeys  = Object.create(null);
 
   if (!isNew && lastRow > 0) {
-    var resp = SpreadsheetApp.getUi().alert(
-      '❓ Append Data',
-      '"Email Permutator" already has data.\nAppend new founder rows to it?',
-      SpreadsheetApp.getUi().ButtonSet.YES_NO
-    );
-    if (resp !== SpreadsheetApp.getUi().Button.YES) return 0;
+    // Only ask in manual mode; the background auto-chain always appends.
+    if (!autoMode) {
+      var resp = SpreadsheetApp.getUi().alert(
+        '❓ Append Data',
+        '"Email Permutator" already has data.\nAppend new founder rows to it?',
+        SpreadsheetApp.getUi().ButtonSet.YES_NO
+      );
+      if (resp !== SpreadsheetApp.getUi().Button.YES) return 0;
+    }
 
     // Load existing keys to prevent duplicates
     var existingVals = permSheet.getRange(1, 1, lastRow, 4).getValues();
@@ -134,4 +141,17 @@ function buildEmailPermutatorSheet() {
 
   SpreadsheetApp.flush();
   return rows.length;
+}
+
+// ── Auto-chain entry point (runs from a background time trigger) ───
+// Step 1.2 schedules this. It builds the permutator without any
+// prompt, then schedules Step 3 (Reoon verification).
+function autoStep2Start() {
+  _deleteTriggersForFunction('autoStep2Start');
+  try {
+    buildEmailPermutatorSheet(true); // true = auto mode, no UI prompt
+  } catch (e) {
+    Logger.log('[autoStep2Start] ' + e.message + '\n' + e.stack);
+  }
+  _scheduleTrigger('autoStep3Start'); // continue the chain -> Step 3
 }

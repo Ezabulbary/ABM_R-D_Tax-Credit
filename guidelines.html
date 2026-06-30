@@ -104,15 +104,29 @@
   </div>
 
   <div class="pipeline">
-    <div class="pipe-box"><strong>⚙️ Setup</strong>API Keys</div>
+    <div class="pipe-box"><strong>Step 1.1</strong>Crunchbase</div>
     <div class="pipe-arrow">→</div>
-    <div class="pipe-box"><strong>Step 1</strong>Domain &amp; Founders</div>
+    <div class="pipe-box"><strong>Step 1.2</strong>Apollo</div>
     <div class="pipe-arrow">→</div>
-    <div class="pipe-box"><strong>Step 2</strong>Email Permutator</div>
+    <div class="pipe-box"><strong>Step 2</strong>Permutator</div>
     <div class="pipe-arrow">→</div>
-    <div class="pipe-box"><strong>Step 3</strong>Verify (Reoon)</div>
+    <div class="pipe-box"><strong>Step 3</strong>Verify</div>
     <div class="pipe-arrow">→</div>
     <div class="pipe-box"><strong>Step 4</strong>Final Format</div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-box"><strong>BigQuery</strong>All Leads</div>
+  </div>
+
+  <div class="alert success">🤖 <strong>One-Click Auto-Chain:</strong> Click <strong>"▶️ RUN FULL WORKFLOW"</strong> once. Step 1.1 runs, then automatically continues to Step 1.2, then Step 2, Step 3, Step 4 and finally pushes every lead to BigQuery — each finished step schedules the next via a 30-second background trigger. You only start once and wait.</div>
+
+  <div class="card">
+    <div class="card-title">📁 Three Separate Spreadsheets</div>
+    <table>
+      <tr><th>Spreadsheet</th><th>Holds</th><th>Spreadsheet ID (in config.gs)</th></tr>
+      <tr><td><strong>ABM R&amp;D Tax Credit - Automation</strong></td><td>All the code + <strong>Email Permutator</strong> tab</td><td>This is the sheet you open the Apps Script editor from.</td></tr>
+      <tr><td><strong>ABM_R&amp;D_Tax Credit</strong></td><td><strong>Main_Crunchbase</strong> + <strong>Final Format</strong> tabs</td><td><code>CRUNCHBASE_SS_ID</code></td></tr>
+      <tr><td><strong>Apollo Leads - Cleaner</strong></td><td><strong>Apollo Leads</strong> + <strong>Remaining</strong> tabs</td><td><code>APOLLO_SS_ID</code></td></tr>
+    </table>
   </div>
 
   <div class="card">
@@ -140,13 +154,14 @@
       <div class="card-title">📂 A — Add Script Files</div>
       <ul>
         <li>Open sheet → <strong>Extensions → Apps Script</strong></li>
-        <li>Create 7 files and paste code:<br>
-          <code>Code.gs</code> &nbsp;<code>config.gs</code><br>
+        <li>Create these files and paste code:<br>
+          <code>Code.gs</code> &nbsp;<code>config.gs</code> &nbsp;<code>helpers.gs</code><br>
           <code>step1_processMain.gs</code><br>
+          <code>step1b_apolloProcess.gs</code><br>
           <code>step2_emailPermutator.gs</code><br>
           <code>step3_reoonVerifier.gs</code><br>
           <code>step4_finalFormat.gs</code><br>
-          <code>guidelines.html</code>
+          <code>tools_cleanup.gs</code> &nbsp;<code>guidelines.html</code>
         </li>
         <li>Save (Ctrl+S) → reload Sheet → <strong>"🚀 Lead Gen Tools"</strong> menu appears</li>
       </ul>
@@ -305,10 +320,10 @@
     <div class="card">
       <div class="card-title">⏱️ Timeout Protection System</div>
       <ul>
-        <li>Runs each batch for max <strong>2 minutes</strong>.</li>
+        <li>Runs each batch for max <strong>4.5 minutes</strong>.</li>
         <li>Saves progress to Script Properties and sets trigger.</li>
-        <li>Trigger auto-resumes after <strong>1 minute</strong>.</li>
-        <li>Repeats until complete. <strong>Execution Timeouts never happen!</strong></li>
+        <li>Trigger auto-resumes after <strong>30 seconds</strong>.</li>
+        <li>Repeats until complete, then auto-starts Step 4. <strong>Execution Timeouts never happen!</strong></li>
       </ul>
     </div>
   </div>
@@ -361,9 +376,10 @@
     <div class="card">
       <div class="card-title">⏱️ Timeout Protection &amp; Output ID</div>
       <ul>
-        <li>Runs each batch for max <strong>2 minutes</strong> (limited to 500 rows per batch) to prevent any execution timeouts.</li>
-        <li>Saves index progress and triggers next batch after <strong>1 minute</strong>.</li>
-        <li><strong>Spreadsheet ID:</strong> Specify ID in <code>config.gs</code> (<code>EXTERNAL_SPREADSHEET_ID</code>) to export and append unique leads to your existing sheet.</li>
+        <li>Runs each batch for max <strong>4.5 minutes</strong> and processes up to <strong>50,000 rows per batch</strong>, so the source data is read &amp; indexed only a few times (not once per 500 rows) — this is the main speed-up.</li>
+        <li>Saves index progress and triggers next batch after <strong>30 seconds</strong> only if more rows remain.</li>
+        <li><strong>Output tab:</strong> The <code>Final Format</code> tab is written in the <strong>ABM_R&amp;D_Tax Credit</strong> spreadsheet (<code>CRUNCHBASE_SS_ID</code>).</li>
+        <li><strong>BigQuery:</strong> Each batch of new rows is also streamed to BigQuery (when <code>BQ_ENABLED</code> is true). See the BigQuery section below.</li>
         <li><strong>Crunchbase Summaries:</strong> At completion, the columns <code>How Many Leads</code> and <code>Verification Status</code> in the <code>Main_Crunchbase</code> sheet are filled automatically.</li>
       </ul>
     </div>
@@ -413,6 +429,38 @@
       <span style="color:#fcd34d">★ Yellow</span> = Supplied by Apollo Leads &nbsp;|&nbsp;
       <span style="color:#cbd5e1">Other</span> = Supplied by Main_Crunchbase or blank
     </p>
+  </div>
+
+  <!-- ══ BIGQUERY ══ -->
+  <hr class="divider">
+  <div class="section">
+    <span class="badge setup">🗄️ BigQuery</span>
+    <span class="section-title">Push All Leads to BigQuery (optional but recommended)</span>
+  </div>
+
+  <div class="alert info">💡 <strong>Why BigQuery?</strong> Google Sheets stops at <strong>10 million cells</strong>. BigQuery can store <strong>billions</strong> of rows and never slows down. Step 4 streams every new lead into a BigQuery table so your data lives there safely — the Sheet stays light.</div>
+
+  <div class="card">
+    <div class="card-title">⚙️ It is OFF by default</div>
+    <ul>
+      <li>In <code>config.gs</code>, <code>BQ_ENABLED</code> is <code>false</code>. The whole workflow still runs and fills the Final Format tab — only the BigQuery push is skipped.</li>
+      <li>To turn it on, follow <strong>BigQuery_Setup_Guide.txt</strong> (a plain-text, beginner step-by-step file in this project). It walks you through creating the project, dataset, table, and linking it to Apps Script.</li>
+      <li>When setup is done, set in <code>config.gs</code>:<br>
+        <code>BQ_ENABLED: true</code>,
+        <code>BQ_PROJECT_ID: 'your-project-id'</code>,
+        <code>BQ_DATASET_ID: 'abm_leads'</code>,
+        <code>BQ_TABLE_ID: 'final_format'</code>.
+      </li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔒 Safe by design</div>
+    <ul>
+      <li>BigQuery receives the <strong>same new rows</strong> that get appended to the Final Format tab — same de-duplication, so no duplicates in BigQuery either.</li>
+      <li>If BigQuery ever fails (wrong ID, no internet, setup not finished), the error is logged and a toast appears, but the <strong>Sheet workflow keeps working</strong>. Nothing breaks.</li>
+      <li>All columns are stored as <strong>text (STRING)</strong> in BigQuery to avoid type errors — the exact column names are listed in BigQuery_Setup_Guide.txt.</li>
+    </ul>
   </div>
 
 </div>
