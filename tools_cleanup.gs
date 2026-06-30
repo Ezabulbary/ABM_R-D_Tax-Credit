@@ -1,55 +1,56 @@
 // ============================================================
-// tools_cleanup.gs — Utility to clean up empty cells
+// tools_cleanup.gs — Clean up empty cells across all spreadsheets
 // ============================================================
 
 /**
- * Removes all empty rows at the bottom and empty columns at the right 
- * of every sheet in the active workbook. This is essential to prevent 
- * the 10,000,000 cell limit error in Google Sheets.
+ * Removes trailing empty rows and columns from every sheet
+ * in all three spreadsheets to prevent the 10M cell limit error.
  */
-function cleanUpWorkbook() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheets = ss.getSheets();
+function cleanUpAllSheets() {
+  var targets = [
+    { ss: SpreadsheetApp.getActiveSpreadsheet(), label: 'Automation (this spreadsheet)' },
+    { ss: SpreadsheetApp.openById(CONFIG.CRUNCHBASE_SS_ID), label: 'ABM_R&D_Tax Credit' },
+    { ss: SpreadsheetApp.openById(CONFIG.APOLLO_SS_ID),     label: 'Apollo Leads - Cleaner' },
+  ];
+
   var totalCellsDeleted = 0;
-  
-  for (var i = 0; i < sheets.length; i++) {
-    var sheet = sheets[i];
-    var maxRows = sheet.getMaxRows();
-    var lastRow = sheet.getLastRow();
-    var maxCols = sheet.getMaxColumns();
-    var lastCol = sheet.getLastColumn();
-    
-    // Ensure we don't delete everything if the sheet is completely empty
-    if (lastRow === 0) lastRow = 1;
-    if (lastCol === 0) lastCol = 1;
-    
-    var rowsToDelete = maxRows - lastRow;
-    var colsToDelete = maxCols - lastCol;
-    
-    if (rowsToDelete > 0) {
-      sheet.deleteRows(lastRow + 1, rowsToDelete);
-      totalCellsDeleted += (rowsToDelete * maxCols);
-    }
-    
-    // After rows are deleted, the maxCols remains, but total cells calculation changes slightly
-    // We already counted the deleted row cells based on maxCols. 
-    // Now delete columns for the remaining rows (lastRow).
-    if (colsToDelete > 0) {
-      sheet.deleteColumns(lastCol + 1, colsToDelete);
-      totalCellsDeleted += (colsToDelete * lastRow);
-    }
-  }
-  
-  if (totalCellsDeleted > 0) {
-    SpreadsheetApp.getUi().alert(
-      '🧹 Cleanup Complete!\n\n' +
-      'Successfully removed ' + totalCellsDeleted.toLocaleString() + ' empty cells from the workbook.\n\n' +
-      'You should no longer see the 10,000,000 cell limit error. You can now run Step 4 again.'
-    );
-  } else {
-    SpreadsheetApp.getUi().alert(
-      '🧹 Cleanup Complete!\n\n' +
-      'No empty extra cells found at the edges of your sheets. If you still get the error, you may have too much actual data in this workbook.'
-    );
-  }
+  var report            = [];
+
+  targets.forEach(function(target) {
+    var ss      = target.ss;
+    var sheets  = ss.getSheets();
+    var ssCells = 0;
+
+    sheets.forEach(function(sheet) {
+      var maxRows = sheet.getMaxRows();
+      var lastRow = Math.max(sheet.getLastRow(), 1);
+      var maxCols = sheet.getMaxColumns();
+      var lastCol = Math.max(sheet.getLastColumn(), 1);
+
+      var rowsToDelete = maxRows - lastRow;
+      var colsToDelete = maxCols - lastCol;
+
+      if (rowsToDelete > 0) {
+        sheet.deleteRows(lastRow + 1, rowsToDelete);
+        ssCells += rowsToDelete * maxCols;
+      }
+      if (colsToDelete > 0) {
+        sheet.deleteColumns(lastCol + 1, colsToDelete);
+        ssCells += colsToDelete * lastRow;
+      }
+    });
+
+    totalCellsDeleted += ssCells;
+    report.push('• ' + target.label + ': ' +
+      (ssCells > 0 ? ssCells.toLocaleString() + ' empty cells removed' : 'already clean'));
+  });
+
+  SpreadsheetApp.getUi().alert(
+    '🧹 Cleanup Complete!\n\n' +
+    report.join('\n') + '\n\n' +
+    'Total cells removed: ' + totalCellsDeleted.toLocaleString() + '\n\n' +
+    (totalCellsDeleted > 0
+      ? 'The 10M cell limit should no longer block you.'
+      : 'No extra empty cells found. If you still hit the limit, the actual data is too large — consider archiving old rows.')
+  );
 }
