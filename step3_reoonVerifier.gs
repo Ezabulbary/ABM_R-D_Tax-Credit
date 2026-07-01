@@ -31,8 +31,17 @@ var PCOL = {
   PAT_FILN  : 8,   // firstinitiallast@
   STAT_FILN : 9,
   VER_EMAIL : 10,
-  VER_STATUS: 11
+  VER_STATUS: 11,
+  VER_DATE  : 12   // filled with the date/time the row was verified
 };
+
+// Writes the final Email + Verification Status + Verification Date
+// into one Email Permutator row (rowIdx is the 0-based data index).
+function _writeFinalPerm(permSheet, rowIdx, emailVal, statusVal, dateStr) {
+  permSheet.getRange(rowIdx + 1, PCOL.VER_EMAIL  + 1).setValue(emailVal);
+  permSheet.getRange(rowIdx + 1, PCOL.VER_STATUS + 1).setValue(statusVal);
+  permSheet.getRange(rowIdx + 1, PCOL.VER_DATE   + 1).setValue(dateStr);
+}
 
 // ════════════════════════════════════════════════════════════
 //  PUBLIC — Menu actions
@@ -153,7 +162,25 @@ function resumeVerification() {
 //  CORE — Single batch processor
 // ════════════════════════════════════════════════════════════
 
+// Lock wrapper — guarantees only ONE verification batch runs at a time.
+// If another batch (or another run) is already working, this one waits
+// briefly, then reschedules itself and exits, so nothing runs twice on
+// the same rows and progress can never get corrupted.
 function _runVerifyBatch() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(2000)) {
+    Logger.log('[Step3] Another verify batch is running — rescheduling.');
+    _scheduleTrigger(TRIGGER_FN_VERIFY);
+    return;
+  }
+  try {
+    _runVerifyBatchInner();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _runVerifyBatchInner() {
   var props     = PropertiesService.getScriptProperties();
   var ss        = SpreadsheetApp.getActiveSpreadsheet();
   var permSheet = ss.getSheetByName(CONFIG.PERMUTATOR_SHEET_NAME);
@@ -168,6 +195,7 @@ function _runVerifyBatch() {
   var data      = permSheet.getDataRange().getValues();
   var totalRows = data.length - 1;
   var startTime = Date.now();
+  var nowStr    = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 
   var i                = startRow;
   var dailyCreditsLeft = -1;
@@ -263,8 +291,7 @@ function _runVerifyBatch() {
     if (resFN.stopped) return;
     statFN = resFN.status;
     if (statFN && CONFIG.VALID_STATUSES.indexOf(statFN) !== -1) {
-      permSheet.getRange(i + 1, PCOL.VER_EMAIL  + 1).setValue(patFN);
-      permSheet.getRange(i + 1, PCOL.VER_STATUS + 1).setValue(statFN);
+      _writeFinalPerm(permSheet, i, patFN, statFN, nowStr);
       foundGood = true;
     }
 
@@ -276,8 +303,7 @@ function _runVerifyBatch() {
       if (resFNLN.stopped) return;
       statFNLN = resFNLN.status;
       if (statFNLN && CONFIG.VALID_STATUSES.indexOf(statFNLN) !== -1) {
-        permSheet.getRange(i + 1, PCOL.VER_EMAIL  + 1).setValue(patFNLN);
-        permSheet.getRange(i + 1, PCOL.VER_STATUS + 1).setValue(statFNLN);
+        _writeFinalPerm(permSheet, i, patFNLN, statFNLN, nowStr);
         foundGood = true;
       }
     }
@@ -290,16 +316,14 @@ function _runVerifyBatch() {
       if (resFILN.stopped) return;
       statFILN = resFILN.status;
       if (statFILN && CONFIG.VALID_STATUSES.indexOf(statFILN) !== -1) {
-        permSheet.getRange(i + 1, PCOL.VER_EMAIL  + 1).setValue(patFILN);
-        permSheet.getRange(i + 1, PCOL.VER_STATUS + 1).setValue(statFILN);
+        _writeFinalPerm(permSheet, i, patFILN, statFILN, nowStr);
         foundGood = true;
       }
     }
 
     // Fallback: record firstname@ even if unverified
     if (!foundGood && patFN) {
-      permSheet.getRange(i + 1, PCOL.VER_EMAIL  + 1).setValue(patFN);
-      permSheet.getRange(i + 1, PCOL.VER_STATUS + 1).setValue(statFN || 'unknown');
+      _writeFinalPerm(permSheet, i, patFN, statFN || 'unknown', nowStr);
     }
 
     if ((i - startRow) % 10 === 0) SpreadsheetApp.flush();

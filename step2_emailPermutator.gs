@@ -28,7 +28,8 @@ function buildEmailPermutatorSheet(autoMode) {
     'firstinitiallast@',    // I  8
     'Verification Status',  // J  9
     'Email',                // K 10
-    'Verification Status'   // L 11
+    'Verification Status',  // L 11
+    'Verification Date'     // M 12  (filled by Step 3 when verified)
   ];
 
   // Get or create Email Permutator in this (Automation) SS
@@ -68,6 +69,14 @@ function buildEmailPermutatorSheet(autoMode) {
     hRow.setBackground('#1a1a2e').setFontColor('#e0e0e0').setFontWeight('bold').setFontSize(10);
     permSheet.setFrozenRows(1);
     lastRow = 1;
+  }
+
+  // Older Email Permutator sheets pre-date the Verification Date column.
+  // Ensure the header exists at column 13 (it sits at the end, so no
+  // existing data needs to shift).
+  if (String(permSheet.getRange(1, 13).getValue()).trim() !== 'Verification Date') {
+    permSheet.getRange(1, 13).setValue('Verification Date')
+      .setBackground('#14532d').setFontColor('#86efac').setFontWeight('bold').setFontSize(10);
   }
 
   // Read Main_Crunchbase
@@ -125,7 +134,7 @@ function buildEmailPermutatorSheet(autoMode) {
       if (permKey in existingKeys) return;
       existingKeys[permKey] = true;
 
-      rows.push([orgName, fn, ln, domain, pat1, '', pat2, '', pat3, '', '', '']);
+      rows.push([orgName, fn, ln, domain, pat1, '', pat2, '', pat3, '', '', '', '']);
     });
   }
 
@@ -137,7 +146,7 @@ function buildEmailPermutatorSheet(autoMode) {
   [6, 8, 10, 12].forEach(function(col) {
     permSheet.getRange(1, col).setBackground('#2d2d44').setFontColor('#aaaaff');
   });
-  permSheet.getRange(1, 11, 1, 2).setBackground('#14532d').setFontColor('#86efac');
+  permSheet.getRange(1, 11, 1, 3).setBackground('#14532d').setFontColor('#86efac');
 
   SpreadsheetApp.flush();
   return rows.length;

@@ -21,6 +21,7 @@ var FINAL_COLUMNS = [
   'Last Name',
   'Email',
   'Verification Status',
+  'Verification Date',
   'Title',
   'Seniority',
   'Departments',
@@ -54,7 +55,8 @@ var FINAL_TO_APOLLO = (function() {
 // These columns come from Email Permutator — never overwrite with Apollo
 var PERM_COL_NAMES = {
   'Domain': true, 'First Name': true, 'Last Name': true,
-  'Email': true, 'Verification Status': true, 'Organization Name': true
+  'Email': true, 'Verification Status': true, 'Verification Date': true,
+  'Organization Name': true
 };
 
 var PROP_F_PERM_IDX    = 'FINAL_PERM_IDX';
@@ -164,10 +166,27 @@ function resumeFinalFormat() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  CORE — Single batch processor (≤ 4.5 min, 500 rows)
+//  CORE — Single batch processor
 // ════════════════════════════════════════════════════════════
 
+// Lock wrapper — guarantees only ONE Final Format batch runs at a time,
+// so the two Final Format sheets + BigQuery never get double-written and
+// progress stays consistent. If busy, it reschedules itself and exits.
 function _runFinalFormatBatch() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(2000)) {
+    Logger.log('[Step4] Another Final Format batch is running — rescheduling.');
+    _scheduleTrigger(TRIGGER_FN_FINAL);
+    return;
+  }
+  try {
+    _runFinalFormatBatchInner();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _runFinalFormatBatchInner() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty(PROP_F_RUNNING) !== 'true') {
     _deleteTriggersForFunction(TRIGGER_FN_FINAL);
@@ -195,7 +214,8 @@ function _runFinalFormatBatch() {
     first : FINAL_COLUMNS.indexOf('First Name'),
     last  : FINAL_COLUMNS.indexOf('Last Name'),
     email : FINAL_COLUMNS.indexOf('Email'),
-    status: FINAL_COLUMNS.indexOf('Verification Status')
+    status: FINAL_COLUMNS.indexOf('Verification Status'),
+    vdate : FINAL_COLUMNS.indexOf('Verification Date')
   };
 
   // Final Format lives in BOTH spreadsheets and is kept in sync.
@@ -319,6 +339,7 @@ function _runFinalFormatBatch() {
     var pRow      = permData[p];
     var verEmail  = pRow[10] ? String(pRow[10]).trim() : '';
     var verStatus = pRow[11] ? String(pRow[11]).trim() : '';
+    var verDate   = pRow[12] ? String(pRow[12]).trim() : '';
     if (!verEmail) continue;
 
     var emailKey = verEmail.toLowerCase();
@@ -341,6 +362,7 @@ function _runFinalFormatBatch() {
     outRow[PI.last]   = pLast;
     outRow[PI.email]  = verEmail;
     outRow[PI.status] = verStatus;
+    outRow[PI.vdate]  = verDate;
 
     for (var fi = 0; fi < numCols; fi++) {
       if (outRow[fi] !== undefined) continue;
@@ -631,8 +653,29 @@ function _ensureFinalSheet(ss, numCols) {
       .setBackground('#0d1b2a').setFontColor('#e2e8f0')
       .setFontWeight('bold').setFontSize(10);
     sheet.setFrozenRows(1);
+  } else {
+    // Older sheets may pre-date the Verification Date column — add it
+    // (in the right place) without disturbing existing data.
+    _ensureVerificationDateColumn(sheet);
   }
   return sheet;
+}
+
+// Inserts a blank "Verification Date" column right after "Verification
+// Status" if it is missing, so existing rows shift correctly and stay
+// aligned with FINAL_COLUMNS.
+function _ensureVerificationDateColumn(sheet) {
+  var lastCol = sheet.getLastColumn();
+  var header  = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+                     .map(function(h) { return String(h).trim(); });
+  if (header.indexOf('Verification Date') !== -1) return;
+
+  var vsIdx = header.indexOf('Verification Status');     // 0-based
+  var after = (vsIdx !== -1) ? vsIdx + 1 : lastCol;      // 1-based col to insert after
+  sheet.insertColumnAfter(after);
+  sheet.getRange(1, after + 1).setValue('Verification Date')
+       .setBackground('#0d1b2a').setFontColor('#e2e8f0')
+       .setFontWeight('bold').setFontSize(10);
 }
 
 // Adds every existing email (lowercased) from a Final Format sheet into

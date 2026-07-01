@@ -6,9 +6,9 @@
 // ============================================================
 
 var MAIN_TARGET_COLUMNS = [
+  'Campaign Status',
   'How Many Leads',
   'Verification Status',
-  'Campaign Status',
   'Organization Name',
   'Website',
   'Founded Date',
