@@ -24,19 +24,12 @@ var APOLLO_TARGET_COLUMNS = [
 
 /**
  * Main entry for Step 1.2.
- * Asks which raw tab to process, splits rows, then adds Domain column.
+ * Reads the fixed "Insert File" tab, splits rows into Apollo Leads +
+ * Remaining, then adds the Domain column. No tab picker prompt.
  */
 function processApolloSheet() {
   var ui       = SpreadsheetApp.getUi();
   var apolloSS = SpreadsheetApp.openById(CONFIG.APOLLO_SS_ID);
-
-  // List tabs that are not Apollo Leads or Remaining
-  var allSheets     = apolloSS.getSheets();
-  var availableTabs = allSheets
-    .map(function(s) { return s.getName(); })
-    .filter(function(n) {
-      return n !== CONFIG.APOLLO_SHEET_NAME && n !== CONFIG.APOLLO_REMAINING_NAME;
-    });
 
   // Get or create destination tabs
   var apolloSheet = apolloSS.getSheetByName(CONFIG.APOLLO_SHEET_NAME);
@@ -45,34 +38,19 @@ function processApolloSheet() {
   var remainingSheet = apolloSS.getSheetByName(CONFIG.APOLLO_REMAINING_NAME);
   if (!remainingSheet) remainingSheet = apolloSS.insertSheet(CONFIG.APOLLO_REMAINING_NAME);
 
-  if (availableTabs.length === 0) {
-    // No raw tabs — just refresh Domain column
+  // The raw leads always live in the fixed "Insert File" tab.
+  var sourceSheet = apolloSS.getSheetByName(CONFIG.APOLLO_INSERT_NAME);
+
+  // No source tab, or source tab is empty -> just refresh the Domain column.
+  if (!sourceSheet || sourceSheet.getLastRow() < 2) {
     _addApolloDomainsColumn(apolloSheet);
     ui.alert(
       '✅ Step 1.2 Complete!\n\n' +
       'Domain column updated in "Apollo Leads" tab.\n' +
-      '(No raw source tabs found to split.)\n\n' +
-      '➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…'
+      '("' + CONFIG.APOLLO_INSERT_NAME + '" tab is empty — nothing to split.)' +
+      (_isAutoMode() ? '\n\n➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…' : '')
     );
-    _scheduleTrigger('autoStep2Start'); // continue the auto-chain
-    return;
-  }
-
-  var tabList = availableTabs.join('\n• ');
-  var res = ui.prompt(
-    '📋 Step 1.2 — Select Apollo Source Tab',
-    'Available tabs in "Apollo Leads - Cleaner":\n• ' + tabList + '\n\n' +
-    'Type the exact tab name to process:',
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (res.getSelectedButton() !== ui.Button.OK) return;
-
-  var sourceTabName = res.getResponseText().trim();
-  var sourceSheet   = apolloSS.getSheetByName(sourceTabName);
-
-  if (!sourceSheet) {
-    ui.alert('❌ Tab "' + sourceTabName + '" not found.\n\nAvailable:\n• ' + tabList);
+    _continueChain('autoStep2Start'); // only chains in one-click mode
     return;
   }
 
@@ -83,10 +61,10 @@ function processApolloSheet() {
     '✅ Step 1.2 Complete!\n\n' +
     '✔ Added to "Apollo Leads":  ' + result.valid     + ' rows\n' +
     '✔ Moved to "Remaining":     ' + result.remaining + ' rows\n\n' +
-    'Domain column updated in "Apollo Leads" tab.\n\n' +
-    '➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…'
+    'Domain column updated in "Apollo Leads" tab.' +
+    (_isAutoMode() ? '\n\n➡️ Step 2 (Email Permutator) will auto-start in 30 seconds…' : '')
   );
-  _scheduleTrigger('autoStep2Start'); // continue the auto-chain
+  _continueChain('autoStep2Start'); // only chains in one-click mode
 }
 
 // ── Core: split source tab → Apollo Leads + Remaining ────────────

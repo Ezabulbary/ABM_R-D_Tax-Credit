@@ -120,3 +120,36 @@ function _scheduleTriggerDelayed(fnName, delayMs) {
     .after(delayMs)
     .create();
 }
+
+// ── Workflow mode (one-click vs single-step) ──────────────────────
+// 'auto'   -> the one-click full workflow; each step schedules the next.
+// 'manual' -> a single menu step; nothing chains to the next step.
+var PROP_WORKFLOW_MODE = 'WORKFLOW_MODE';
+
+function _setWorkflowMode(mode) {
+  PropertiesService.getScriptProperties().setProperty(PROP_WORKFLOW_MODE, mode);
+}
+
+function _isAutoMode() {
+  return PropertiesService.getScriptProperties().getProperty(PROP_WORKFLOW_MODE) === 'auto';
+}
+
+// Schedules the next step ONLY when running the one-click workflow.
+// In manual (single-step) mode this does nothing.
+function _continueChain(fnName) {
+  if (_isAutoMode()) _scheduleTrigger(fnName);
+}
+
+// ── Spreadsheet handles ───────────────────────────────────────────
+// The Automation spreadsheet is the one the script is bound to.
+function _getAutomationSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
+function _getCrunchbaseSS() { return SpreadsheetApp.openById(CONFIG.CRUNCHBASE_SS_ID); }
+function _getApolloSS()     { return SpreadsheetApp.openById(CONFIG.APOLLO_SS_ID); }
+
+// Returns the two spreadsheets that share the Info + Final Format tabs.
+function _getSharedSpreadsheets() {
+  return [
+    { ss: _getAutomationSS(), label: 'ABM R&D Tax Credit - Automation' },
+    { ss: _getCrunchbaseSS(), label: 'ABM_R&D_Tax Credit' }
+  ];
+}

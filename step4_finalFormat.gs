@@ -69,6 +69,7 @@ var TRIGGER_FN_FINAL   = 'autoFinalFormatContinue';
 
 // Menu entry — shows alerts, then starts the first batch.
 function startFinalFormat() {
+  _setWorkflowMode('manual');
   var ui     = SpreadsheetApp.getUi();
   var reason = _prepareFinalFormat();
   if (reason === 'no_main') {
@@ -186,15 +187,6 @@ function _runFinalFormatBatch() {
     return;
   }
 
-  // Get or create Final Format tab in Crunchbase SS
-  var finalSheet = crunchbaseSS.getSheetByName(CONFIG.FINAL_FORMAT_SHEET_NAME);
-  var isNew      = false;
-  if (!finalSheet) {
-    finalSheet = crunchbaseSS.insertSheet(CONFIG.FINAL_FORMAT_SHEET_NAME);
-    isNew      = true;
-  }
-
-  var lastRow = finalSheet.getLastRow();
   var numCols = FINAL_COLUMNS.length;
 
   var PI = {
@@ -206,25 +198,19 @@ function _runFinalFormatBatch() {
     status: FINAL_COLUMNS.indexOf('Verification Status')
   };
 
-  // ── Load existing emails (dedup) ──────────────────────────
-  var seenKeys = Object.create(null);
-  if (lastRow > 1) {
-    var existingEmails = finalSheet.getRange(1, PI.email + 1, lastRow, 1).getValues();
-    for (var j = 1; j < existingEmails.length; j++) {
-      var eEmail = String(existingEmails[j][0]).trim().toLowerCase();
-      if (eEmail) seenKeys[eEmail] = true;
-    }
-  }
+  // Final Format lives in BOTH spreadsheets and is kept in sync.
+  // Crunchbase copy = primary, Automation copy = mirror. Both get the
+  // exact same appended rows so they stay identical.
+  var finalSheet  = _ensureFinalSheet(crunchbaseSS, numCols); // primary
+  var finalMirror = _ensureFinalSheet(automationSS, numCols); // mirror
 
-  // ── Headers ───────────────────────────────────────────────
-  if (isNew || lastRow === 0) {
-    finalSheet.getRange(1, 1, 1, numCols).setValues([FINAL_COLUMNS]);
-    finalSheet.getRange(1, 1, 1, numCols)
-      .setBackground('#0d1b2a').setFontColor('#e2e8f0')
-      .setFontWeight('bold').setFontSize(10);
-    finalSheet.setFrozenRows(1);
-    lastRow = 1;
-  }
+  var lastRow       = Math.max(finalSheet.getLastRow(), 1);
+  var lastRowMirror = Math.max(finalMirror.getLastRow(), 1);
+
+  // ── Load existing emails from BOTH sheets (global dedup) ───
+  var seenKeys = Object.create(null);
+  _loadEmailKeys(finalSheet,  PI.email, seenKeys);
+  _loadEmailKeys(finalMirror, PI.email, seenKeys);
 
   // ── Read source data ──────────────────────────────────────
   var mainData    = mainSheet.getDataRange().getValues();
@@ -421,15 +407,15 @@ function _runFinalFormatBatch() {
     }
   }
 
-  // ── Write batch ───────────────────────────────────────────
+  // ── Write batch to BOTH Final Format sheets ───────────────
   if (finalRows.length > 0) {
     finalSheet.getRange(lastRow + 1, 1, finalRows.length, numCols).setValues(finalRows);
+    finalMirror.getRange(lastRowMirror + 1, 1, finalRows.length, numCols).setValues(finalRows);
     sesAdded += finalRows.length;
     // Push the exact same new rows to BigQuery (skipped if BQ disabled).
     _insertRowsToBigQuery(finalRows, FINAL_COLUMNS);
   }
 
-  finalSheet.setColumnWidths(1, numCols, 160);
   SpreadsheetApp.flush();
 
   if (hitTimeout) {
@@ -497,6 +483,16 @@ function _runFinalFormatBatch() {
   }
 
   SpreadsheetApp.flush();
+
+  // ── Update the shared Info dashboard in BOTH spreadsheets ──
+  // Built from the primary Final Format sheet contents (localValues).
+  try {
+    var infoStats = _computeFinalStats(localValues);
+    infoStats.addedThisRun = sesAdded;
+    _updateInfoTabs(infoStats);
+  } catch (infoErr) {
+    Logger.log('[Step4] Info tab update failed: ' + infoErr.message);
+  }
 
   var bqNote = CONFIG.BQ_ENABLED
     ? 'Also pushed to BigQuery: ' + CONFIG.BQ_DATASET_ID + '.' + CONFIG.BQ_TABLE_ID
@@ -620,4 +616,33 @@ function _bqFieldName(header) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_') // any run of non-alphanumerics -> one _
     .replace(/^_+|_+$/g, '');     // trim leading/trailing underscores
+}
+
+// ── Final Format sheet helpers (used for both spreadsheets) ───────
+
+// Returns the "Final Format" sheet of a spreadsheet, creating it with
+// styled headers if it does not exist yet.
+function _ensureFinalSheet(ss, numCols) {
+  var sheet = ss.getSheetByName(CONFIG.FINAL_FORMAT_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(CONFIG.FINAL_FORMAT_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, numCols).setValues([FINAL_COLUMNS]);
+    sheet.getRange(1, 1, 1, numCols)
+      .setBackground('#0d1b2a').setFontColor('#e2e8f0')
+      .setFontWeight('bold').setFontSize(10);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// Adds every existing email (lowercased) from a Final Format sheet into
+// the shared seenKeys map, so duplicates are skipped across both sheets.
+function _loadEmailKeys(sheet, emailIdx0, seenKeys) {
+  var last = sheet.getLastRow();
+  if (last < 2) return;
+  var vals = sheet.getRange(2, emailIdx0 + 1, last - 1, 1).getValues();
+  for (var i = 0; i < vals.length; i++) {
+    var e = String(vals[i][0]).trim().toLowerCase();
+    if (e) seenKeys[e] = true;
+  }
 }

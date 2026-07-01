@@ -39,7 +39,9 @@ var PCOL = {
 // ════════════════════════════════════════════════════════════
 
 // Menu entry — shows alerts, then starts the first batch.
+// Single-step (manual) mode: it will NOT auto-start Step 4 afterwards.
 function startVerification() {
+  _setWorkflowMode('manual');
   var ui     = SpreadsheetApp.getUi();
   var reason = _prepareVerification();
   if (reason === 'no_perm') { ui.alert('❌ "Email Permutator" not found. Run Step 2 first.'); return; }
@@ -66,7 +68,7 @@ function autoStep3Start() {
     // Nothing new to verify — skip straight to Step 4 so the chain
     // still produces the Final Format output.
     Logger.log('[autoStep3Start] all rows already verified, jumping to Step 4.');
-    _scheduleTrigger('autoFinalFormatStart');
+    _continueChain('autoFinalFormatStart');
     return;
   }
   if (reason !== 'ok') {
@@ -317,8 +319,8 @@ function _runVerifyBatch() {
     20
   );
 
-  // Auto-chain to Step 4 (autoFinalFormatStart is defined in step4).
-  _scheduleTrigger('autoFinalFormatStart');
+  // Auto-chain to Step 4 (only in one-click mode; defined in step4).
+  _continueChain('autoFinalFormatStart');
 }
 
 // ════════════════════════════════════════════════════════════

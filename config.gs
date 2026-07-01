@@ -10,11 +10,16 @@ var CONFIG = {
   APOLLO_SS_ID            : '14eta9RZ_S4chtLoSlYqn55BCisyrPjDTjX6Am1Zys1M',
 
   // ── Tab Names ─────────────────────────────────────────────
+  // CRUNCHBASE_SS ("ABM_R&D_Tax Credit")  tabs: Info, Main_Crunchbase, Final Format
+  // Automation  SS ("ABM R&D Tax Credit - Automation") tabs: Info, Email Permutator, Final Format
+  // APOLLO_SS   ("Apollo Leads - Cleaner") tabs: Apollo Leads, Insert File, Remaining
   MAIN_SHEET_NAME         : 'Main_Crunchbase',   // in CRUNCHBASE_SS
   APOLLO_SHEET_NAME       : 'Apollo Leads',       // in APOLLO_SS
+  APOLLO_INSERT_NAME      : 'Insert File',        // in APOLLO_SS — paste new raw leads here
   APOLLO_REMAINING_NAME   : 'Remaining',          // in APOLLO_SS
   PERMUTATOR_SHEET_NAME   : 'Email Permutator',  // in Automation SS (this spreadsheet)
-  FINAL_FORMAT_SHEET_NAME : 'Final Format',       // in CRUNCHBASE_SS
+  FINAL_FORMAT_SHEET_NAME : 'Final Format',       // in BOTH CRUNCHBASE_SS and Automation SS
+  INFO_SHEET_NAME         : 'Info',               // in BOTH CRUNCHBASE_SS and Automation SS
 
   // ── Timing ────────────────────────────────────────────────
   SLEEP_MS                : 700,              // ms between Reoon API calls

@@ -117,30 +117,34 @@
     <div class="pipe-box"><strong>BigQuery</strong>All Leads</div>
   </div>
 
-  <div class="alert success">🤖 <strong>One-Click Auto-Chain:</strong> Click <strong>"▶️ RUN FULL WORKFLOW"</strong> once. Step 1.1 runs, then automatically continues to Step 1.2, then Step 2, Step 3, Step 4 and finally pushes every lead to BigQuery — each finished step schedules the next via a 30-second background trigger. You only start once and wait.</div>
+  <div class="alert success">🤖 <strong>Two ways to run:</strong> <strong>(1) One-click</strong> — "▶️ RUN FULL WORKFLOW" runs Step 1.1 → 1.2 → 2 → 3 → 4 → BigQuery automatically (each step schedules the next via a 30-second trigger). <strong>(2) Step by step</strong> — run any single menu item; it runs ONLY that step and does not continue to the next.</div>
 
   <div class="card">
-    <div class="card-title">📁 Three Separate Spreadsheets</div>
+    <div class="card-title">📁 Three Spreadsheets — 3 tabs each</div>
     <table>
-      <tr><th>Spreadsheet</th><th>Holds</th><th>Spreadsheet ID (in config.gs)</th></tr>
-      <tr><td><strong>ABM R&amp;D Tax Credit - Automation</strong></td><td>All the code + <strong>Email Permutator</strong> tab</td><td>This is the sheet you open the Apps Script editor from.</td></tr>
-      <tr><td><strong>ABM_R&amp;D_Tax Credit</strong></td><td><strong>Main_Crunchbase</strong> + <strong>Final Format</strong> tabs</td><td><code>CRUNCHBASE_SS_ID</code></td></tr>
-      <tr><td><strong>Apollo Leads - Cleaner</strong></td><td><strong>Apollo Leads</strong> + <strong>Remaining</strong> tabs</td><td><code>APOLLO_SS_ID</code></td></tr>
+      <tr><th>Spreadsheet</th><th>Tabs</th><th>ID in config.gs</th></tr>
+      <tr><td><strong>ABM_R&amp;D_Tax Credit</strong></td><td><strong>Info</strong>, Main_Crunchbase, <strong>Final Format</strong></td><td><code>CRUNCHBASE_SS_ID</code></td></tr>
+      <tr><td><strong>ABM R&amp;D Tax Credit - Automation</strong></td><td><strong>Info</strong>, Email Permutator, <strong>Final Format</strong></td><td>The sheet you open Apps Script from</td></tr>
+      <tr><td><strong>Apollo Leads - Cleaner</strong></td><td>Apollo Leads, <strong>Insert File</strong>, Remaining</td><td><code>APOLLO_SS_ID</code></td></tr>
     </table>
+    <div class="alert info" style="margin:8px 0 0;">🔗 <strong>Shared tabs:</strong> <strong>Info</strong> and <strong>Final Format</strong> exist in the first two spreadsheets and are updated together (kept identical).</div>
   </div>
 
   <div class="card">
-    <div class="card-title">📁 Sheet Structure</div>
+    <div class="card-title">📁 What each tab does</div>
     <table>
-      <tr><th>Sheet</th><th>Created by</th><th>Purpose &amp; Appending Behavior</th></tr>
-      <tr><td><strong>Main_Crunchbase</strong></td><td>You (pre-existing)</td><td>Source data — Step 1 aligns columns, extracts domains, and splits founders. <strong>Never deleted.</strong></td></tr>
-      <tr><td><strong>Apollo Leads</strong></td><td>You (pre-existing)</td><td>Apollo export — Step 1 aligns columns and extracts domains. <strong>Never deleted.</strong></td></tr>
-      <tr><td><strong>Email Permutator</strong></td><td>Step 2</td><td>3 email patterns per founder + Reoon results. <strong>Appends new unique rows at last row. Never deleted.</strong></td></tr>
-      <tr><td><strong>Final Format</strong></td><td>Step 4</td><td>Clean output. <strong>Appends new unique emails from Permutator + Apollo Leads. Never deleted.</strong></td></tr>
+      <tr><th>Tab</th><th>Created by</th><th>Purpose</th></tr>
+      <tr><td><strong>Info</strong></td><td>Step 4</td><td>Stats dashboard (totals, verified counts, domains, last-updated). Updated with Final Format. <strong>Protected — only the sheet owner can edit/delete it.</strong></td></tr>
+      <tr><td><strong>Main_Crunchbase</strong></td><td>You</td><td>Source data — Step 1.1 extracts domains &amp; splits founders. Never deleted.</td></tr>
+      <tr><td><strong>Insert File</strong></td><td>You</td><td>Paste new raw Apollo leads here. Step 1.2 reads this tab automatically (no prompt).</td></tr>
+      <tr><td><strong>Apollo Leads</strong></td><td>Step 1.2</td><td>Clean, de-duplicated Apollo rows + Domain column. Never deleted.</td></tr>
+      <tr><td><strong>Remaining</strong></td><td>Step 1.2</td><td>Duplicate / no-email rows from Insert File.</td></tr>
+      <tr><td><strong>Email Permutator</strong></td><td>Step 2</td><td>3 email patterns per founder + Reoon results. Appends unique rows.</td></tr>
+      <tr><td><strong>Final Format</strong></td><td>Step 4</td><td>Clean output — written to BOTH spreadsheets + BigQuery. Appends unique emails. Never deleted.</td></tr>
     </table>
   </div>
 
-  <div class="alert info">💡 <strong>All Tabs are Fixed:</strong> During any step execution, missing sheets are auto-created, but existing sheets are <strong>never deleted</strong>. New data is appended to the last row, checking for duplicate emails.</div>
+  <div class="alert info">💡 <strong>All Tabs are Fixed:</strong> Missing tabs are auto-created, existing tabs are <strong>never deleted</strong>. New data is appended at the last row, skipping duplicate emails.</div>
 
   <!-- ══ SETUP ══ -->
   <hr class="divider">
