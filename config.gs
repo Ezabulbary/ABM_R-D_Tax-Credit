@@ -7,7 +7,7 @@ var CONFIG = {
   // "ABM_R&D_Tax Credit" — Main_Crunchbase + Final Format tabs live here
   CRUNCHBASE_SS_ID        : '1_8HJOyl9pIKTmTSrqPZ3oD0tMwo4-7fdifQm7kzem0c',
   // "Apollo Leads - Cleaner" — Apollo Leads + Remaining tabs live here
-  APOLLO_SS_ID            : '14eta9RZ_S4chtLoSlYqn55BCisyrPjDTjX6Am1Zys1M',
+  APOLLO_SS_ID            : '1wjNaV0NxMZD0fC6cb5-fR-o-UfB5wQ18yN4vLquhrxI',
 
   // ── Tab Names ─────────────────────────────────────────────
   // CRUNCHBASE_SS ("ABM_R&D_Tax Credit")  tabs: Info, Main_Crunchbase, Final Format

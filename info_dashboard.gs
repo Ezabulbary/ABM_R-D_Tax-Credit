@@ -1,65 +1,44 @@
 // ============================================================
-// info_dashboard.gs — the shared "Info" tab
+// info_dashboard.gs — the shared, LIVE "Info" tab
 //
 // The "Info" tab exists in BOTH spreadsheets:
 //   - "ABM_R&D_Tax Credit"
 //   - "ABM R&D Tax Credit - Automation"
-// It is updated together with the Final Format tab (at the end of
-// Step 4) and shows a small stats dashboard.
 //
-// PROTECTION: the tab is sheet-protected so that only the spreadsheet
-// OWNER can edit or delete it. Other editors can view it but cannot
-// change or remove it. (The owner running the script bypasses the
-// protection, so the dashboard still updates automatically.)
+// It is a LIVE dashboard: the numbers are Google Sheets FORMULAS that
+// point at the local "Final Format" tab, so they auto-recalculate the
+// moment Final Format changes — even without running the workflow. The
+// workflow only refreshes the layout, the "last run" time, and re-locks
+// the tab.
+//
+// Final Format column reference (used by the formulas):
+//   B = Domain,  E = Email,  F = Verification Status
+//
+// PROTECTION: sheet-protected so only the OWNER can edit or delete it.
 // ============================================================
 
-// Builds a stats object from the primary Final Format sheet values
-// (the 2D array including the header row).
-function _computeFinalStats(finalValues) {
-  var statusIdx = FINAL_COLUMNS.indexOf('Verification Status');
-  var domainIdx = FINAL_COLUMNS.indexOf('Domain');
-  var emailIdx  = FINAL_COLUMNS.indexOf('Email');
-
-  var stats  = { total: 0, safe: 0, catchAll: 0, invalid: 0, other: 0, domains: 0, addedThisRun: 0 };
-  var domSet = Object.create(null);
-
-  for (var i = 1; i < finalValues.length; i++) {
-    var row   = finalValues[i];
-    var email = emailIdx  >= 0 ? row[emailIdx]  : '';
-    var dom   = domainIdx >= 0 ? String(row[domainIdx] || '').trim().toLowerCase() : '';
-    if (!email && !dom) continue; // skip blank rows
-
-    stats.total++;
-
-    var st = statusIdx >= 0 ? String(row[statusIdx] || '').trim().toLowerCase() : '';
-    if      (st === 'safe')      stats.safe++;
-    else if (st === 'catch_all') stats.catchAll++;
-    else if (st === 'invalid')   stats.invalid++;
-    else                         stats.other++;
-
-    if (dom) domSet[dom] = true;
-  }
-
-  stats.domains = Object.keys(domSet).length;
-  return stats;
-}
-
 // Writes + protects the Info tab in BOTH shared spreadsheets.
+// stats.addedThisRun = number of new leads added in the run that called this.
 function _updateInfoTabs(stats) {
+  stats = stats || {};
   var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 
+  // Quoted local sheet name for use inside formulas: 'Final Format'
+  var ff = "'" + CONFIG.FINAL_FORMAT_SHEET_NAME + "'";
+
+  // Value column mixes static fields (run time / count) and LIVE formulas.
   var rows = [
     ['ABM Lead Gen — Info Dashboard', ''],
-    ['Last updated', now],
+    ['Last workflow run',  now],
+    ['Added in last run',  (stats.addedThisRun || 0)],
     ['', ''],
-    ['Total leads (Final Format)', stats.total],
-    ['Added in last run',          stats.addedThisRun || 0],
-    ['Unique domains',             stats.domains],
+    ['Total leads (live)',    '=COUNTA(' + ff + '!E2:E)'],
+    ['Unique domains (live)', '=COUNTUNIQUE(' + ff + '!B2:B)'],
     ['', ''],
-    ['Safe',              stats.safe],
-    ['Catch-all',         stats.catchAll],
-    ['Invalid',           stats.invalid],
-    ['Other / unknown',   stats.other],
+    ['Safe (live)',      '=COUNTIF(' + ff + '!F2:F,"safe")'],
+    ['Catch-all (live)', '=COUNTIF(' + ff + '!F2:F,"catch_all")'],
+    ['Invalid (live)',   '=COUNTIF(' + ff + '!F2:F,"invalid")'],
+    ['Other / unknown',  '=MAX(0,COUNTA(' + ff + '!E2:E)-COUNTIF(' + ff + '!F2:F,"safe")-COUNTIF(' + ff + '!F2:F,"catch_all")-COUNTIF(' + ff + '!F2:F,"invalid"))'],
     ['', ''],
     ['Do not delete this tab', 'Only the sheet owner can edit or delete it.']
   ];
@@ -74,6 +53,7 @@ function _updateInfoTabs(stats) {
 }
 
 // Writes the dashboard rows into one spreadsheet's Info tab and locks it.
+// setValues stores "=..." strings as live formulas automatically.
 function _writeInfoSheet(ss, rows) {
   var sheet = ss.getSheetByName(CONFIG.INFO_SHEET_NAME);
   if (!sheet) sheet = ss.insertSheet(CONFIG.INFO_SHEET_NAME, 0); // create as first tab
@@ -82,7 +62,7 @@ function _writeInfoSheet(ss, rows) {
   body.breakApart();     // undo any previous merge so setValues is safe
   sheet.clearContents(); // owner bypasses protection
 
-  body.setValues(rows);
+  body.setValues(rows);  // "=..." entries become live formulas
 
   // Title styling (row 1)
   sheet.getRange(1, 1, 1, 2)

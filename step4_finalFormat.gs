@@ -506,12 +506,10 @@ function _runFinalFormatBatchInner() {
 
   SpreadsheetApp.flush();
 
-  // ── Update the shared Info dashboard in BOTH spreadsheets ──
-  // Built from the primary Final Format sheet contents (localValues).
+  // ── Refresh the shared LIVE Info dashboard in BOTH spreadsheets ──
+  // The counts are live formulas; we only pass this run's added count.
   try {
-    var infoStats = _computeFinalStats(localValues);
-    infoStats.addedThisRun = sesAdded;
-    _updateInfoTabs(infoStats);
+    _updateInfoTabs({ addedThisRun: sesAdded });
   } catch (infoErr) {
     Logger.log('[Step4] Info tab update failed: ' + infoErr.message);
   }
