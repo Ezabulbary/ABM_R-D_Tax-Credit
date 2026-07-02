@@ -54,3 +54,52 @@ function cleanUpAllSheets() {
       : 'No extra empty cells found. If you still hit the limit, the actual data is too large — consider archiving old rows.')
   );
 }
+
+// ============================================================
+// Fix "#ERROR! Formula parse error" cells (usually phone numbers
+// that start with "+", "=" or "-" and got read as formulas).
+//
+// Recovers the original text from the broken formula and rewrites it
+// as PLAIN TEXT in the Apollo Leads / Remaining / Insert File tabs.
+// ============================================================
+function fixFormulaErrorCells() {
+  var apolloSS = SpreadsheetApp.openById(CONFIG.APOLLO_SS_ID);
+  var names = [CONFIG.APOLLO_SHEET_NAME, CONFIG.APOLLO_REMAINING_NAME, CONFIG.APOLLO_INSERT_NAME];
+  var totalFixed = 0;
+
+  names.forEach(function(name) {
+    var sh = apolloSS.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 1 || sh.getLastColumn() < 1) return;
+
+    var rng      = sh.getDataRange();
+    var formulas = rng.getFormulas();
+    var values   = rng.getValues();
+    var changed  = false;
+
+    for (var r = 0; r < formulas.length; r++) {
+      for (var c = 0; c < formulas[r].length; c++) {
+        var f = formulas[r][c];
+        if (f && f.charAt(0) === '=') {
+          // Drop the leading "=" to recover the literal text,
+          // e.g. "=+1 (555) 123-4567" -> "+1 (555) 123-4567"
+          values[r][c] = f.substring(1);
+          changed = true;
+          totalFixed++;
+        }
+      }
+    }
+
+    if (changed) {
+      rng.setNumberFormat('@'); // whole block to text so it never re-parses
+      rng.setValues(values);
+    }
+  });
+
+  SpreadsheetApp.flush();
+  SpreadsheetApp.getUi().alert(
+    '🧹 Fixed ' + totalFixed + ' formula-error cell(s) into plain text.\n\n' +
+    'Tip: before pasting new leads, set the "' + CONFIG.APOLLO_INSERT_NAME +
+    '" tab to Plain Text (Format → Number → Plain text) so phone numbers ' +
+    'never turn into #ERROR again.'
+  );
+}

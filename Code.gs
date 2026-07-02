@@ -45,6 +45,7 @@ function onOpen() {
     .addSeparator()
     .addItem('⚙️  Manage Reoon API Keys',  'manageApiKeys')
     .addItem('🧹  Clean Up All Sheets',    'cleanUpAllSheets')
+    .addItem('🩹  Fix #ERROR Phone Cells', 'fixFormulaErrorCells')
     .addToUi();
 }
 

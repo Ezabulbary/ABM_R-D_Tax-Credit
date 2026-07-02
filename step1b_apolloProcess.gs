@@ -142,17 +142,22 @@ function _splitApolloData(sourceSheet, apolloSheet, remainingSheet) {
     }
   }
 
-  // Write valid rows to Apollo Leads
+  // Write valid rows to Apollo Leads.
+  // Force the destination range to PLAIN TEXT first, so values that start
+  // with "+", "=" or "-" (e.g. phone numbers like "+1 (555) 123") are NOT
+  // interpreted as formulas -> no more #ERROR! "Formula parse error".
   if (validRows.length > 0) {
-    apolloSheet.getRange(apolloLastRow + 1, 1, validRows.length, apolloHeaders.length)
-               .setValues(validRows);
+    var vRange = apolloSheet.getRange(apolloLastRow + 1, 1, validRows.length, apolloHeaders.length);
+    vRange.setNumberFormat('@');
+    vRange.setValues(validRows);
   }
 
-  // Write duplicates/no-email rows to Remaining
+  // Write duplicates/no-email rows to Remaining (also as plain text)
   if (remainingRows.length > 0) {
     var remLastRow = Math.max(remainingSheet.getLastRow(), 1);
-    remainingSheet.getRange(remLastRow + 1, 1, remainingRows.length, apolloHeaders.length)
-                  .setValues(remainingRows);
+    var rRange = remainingSheet.getRange(remLastRow + 1, 1, remainingRows.length, apolloHeaders.length);
+    rRange.setNumberFormat('@');
+    rRange.setValues(remainingRows);
   }
 
   SpreadsheetApp.flush();
